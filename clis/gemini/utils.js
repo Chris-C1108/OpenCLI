@@ -11,9 +11,12 @@ export function getGeminiSessionAnchor() {
     return __geminiSessionAnchor;
 }
 export function buildGeminiTargetUrl() {
-    return __geminiSessionAnchor 
-        ? `https://gemini.google.com/app/${__geminiSessionAnchor}`
-        : GEMINI_APP_URL;
+    if (!__geminiSessionAnchor) {
+        return GEMINI_APP_URL;
+    }
+    return __geminiSessionAnchor.includes('-')
+        ? `https://gemini.google.com/notebook/${__geminiSessionAnchor}`
+        : `https://gemini.google.com/app/${__geminiSessionAnchor}`;
 }
 export const GEMINI_DEEP_RESEARCH_DEFAULT_TOOL_LABELS = ['Deep Research', 'Deep research', '\u6df1\u5ea6\u7814\u7a76'];
 export const GEMINI_DEEP_RESEARCH_DEFAULT_CONFIRM_LABELS = [
@@ -938,7 +941,7 @@ function getGeminiConversationListScript() {
         }
       } catch (e) {}
 
-      const selector = 'a[href*="/app"]';
+      const selector = 'a[href*="/app"], a[href*="/notebook"]';
       const navRoots = Array.from(document.querySelectorAll('nav, aside, [role="navigation"]'));
       const rootsWithLinks = navRoots.filter((root) => root.querySelector(selector));
       const roots = rootsWithLinks.length > 0 ? rootsWithLinks : [document];
@@ -958,9 +961,10 @@ function getGeminiConversationListScript() {
           const href = anchor.getAttribute('href') || '';
           if (!href) continue;
           
-          // Only matches URLs that have a session ID
+          // Matches regular session ID or notebook UUID
           const sessionMatch = href.match(/\\/app\\/([a-f0-9]{16})/i);
-          if (!sessionMatch) continue;
+          const notebookMatch = href.match(/\\/notebook\\/([a-f0-9-]+)/i);
+          if (!sessionMatch && !notebookMatch) continue;
 
           let url = '';
           try {

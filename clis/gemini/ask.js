@@ -40,11 +40,15 @@ export const askCommand = cli({
         }
 
         if (sessionId) {
-            if (!/^[a-f0-9]{16}$/i.test(sessionId)) {
-                throw new ArgumentError('--session must be a 16-character hexadecimal string');
+            const isHex16 = /^[a-f0-9]{16}$/i.test(sessionId);
+            const isUuid = /^[a-f0-9-]{36}$/i.test(sessionId);
+            if (!isHex16 && !isUuid) {
+                throw new ArgumentError('--session must be a 16-character hex or a 36-character UUID');
             }
             setGeminiSessionAnchor(sessionId);
-            const targetUrl = `https://gemini.google.com/app/${sessionId}`;
+            const targetUrl = isUuid
+                ? `https://gemini.google.com/notebook/${sessionId}`
+                : `https://gemini.google.com/app/${sessionId}`;
             await page.goto(targetUrl, { waitUntil: 'load', settleMs: 3000 });
             await page.wait(1.5);
         } else {

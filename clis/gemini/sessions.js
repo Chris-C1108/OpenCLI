@@ -6,7 +6,7 @@ import { GEMINI_DOMAIN, getGeminiConversationList, clickGeminiConversationByTitl
  * 从 URL 中提取 session ID
  */
 function extractSessionId(url) {
-    const match = url.match(/\/app\/([a-f0-9]{16})/i);
+    const match = url.match(/\/app\/([a-f0-9]{16})/i) || url.match(/\/notebook\/([a-f0-9-]+)/i);
     return match ? match[1] : '';
 }
 
