@@ -10774,6 +10774,20 @@
         "default": "false",
         "required": false,
         "help": "Start a new chat first (true/false, default: false)"
+      },
+      {
+        "name": "session",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "help": "Resume a specific conversation by session ID (16-char hex)"
+      },
+      {
+        "name": "model",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "help": "Gemini model to use (gemini-2.0-flash-exp, gemini-1.5-pro, etc.)"
       }
     ],
     "columns": [
@@ -10959,6 +10973,69 @@
     "modulePath": "gemini/new.js",
     "sourceFile": "gemini/new.js",
     "navigateBefore": false,
+    "siteSession": "persistent"
+  },
+  {
+    "site": "gemini",
+    "name": "select-session",
+    "description": "Select and open a Gemini conversation by title",
+    "access": "write",
+    "domain": "gemini.google.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "title",
+        "type": "str",
+        "required": true,
+        "positional": true,
+        "help": "Conversation title to search for"
+      },
+      {
+        "name": "exact",
+        "type": "boolean",
+        "default": false,
+        "required": false,
+        "help": "Use exact match instead of contains"
+      }
+    ],
+    "columns": [
+      "Status",
+      "SessionID",
+      "URL"
+    ],
+    "type": "js",
+    "modulePath": "gemini/sessions.js",
+    "sourceFile": "gemini/sessions.js",
+    "navigateBefore": true,
+    "siteSession": "persistent"
+  },
+  {
+    "site": "gemini",
+    "name": "sessions",
+    "description": "List all Gemini conversation sessions",
+    "access": "read",
+    "domain": "gemini.google.com",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "limit",
+        "type": "int",
+        "default": 20,
+        "required": false,
+        "help": "Max number of sessions to return (default: 20)"
+      }
+    ],
+    "columns": [
+      "SessionID",
+      "Title",
+      "URL"
+    ],
+    "type": "js",
+    "modulePath": "gemini/sessions.js",
+    "sourceFile": "gemini/sessions.js",
+    "navigateBefore": true,
     "siteSession": "persistent"
   },
   {

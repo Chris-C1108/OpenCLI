@@ -1,6 +1,20 @@
 import { CommandExecutionError } from '@jackwener/opencli/errors';
 export const GEMINI_DOMAIN = 'gemini.google.com';
 export const GEMINI_APP_URL = 'https://gemini.google.com/app';
+
+// 全局会话锚定状态
+let __geminiSessionAnchor = null;
+export function setGeminiSessionAnchor(sessionId) {
+    __geminiSessionAnchor = sessionId ? String(sessionId).trim() : null;
+}
+export function getGeminiSessionAnchor() {
+    return __geminiSessionAnchor;
+}
+export function buildGeminiTargetUrl() {
+    return __geminiSessionAnchor 
+        ? `https://gemini.google.com/app/${__geminiSessionAnchor}`
+        : GEMINI_APP_URL;
+}
 export const GEMINI_DEEP_RESEARCH_DEFAULT_TOOL_LABELS = ['Deep Research', 'Deep research', '\u6df1\u5ea6\u7814\u7a76'];
 export const GEMINI_DEEP_RESEARCH_DEFAULT_CONFIRM_LABELS = [
     'Start research',
@@ -1003,7 +1017,7 @@ export async function isOnGemini(page) {
 }
 export async function ensureGeminiPage(page) {
     if (!(await isOnGemini(page))) {
-        await page.goto(GEMINI_APP_URL, { waitUntil: 'load', settleMs: 2500 });
+        await page.goto(buildGeminiTargetUrl(), { waitUntil: 'load', settleMs: 2500 });
         await page.wait(1);
     }
 }
@@ -1012,7 +1026,7 @@ export async function getCurrentGeminiUrl(page) {
     const url = await page.evaluate(currentUrlScript()).catch(() => '');
     if (typeof url === 'string' && url.trim())
         return url;
-    return GEMINI_APP_URL;
+    return buildGeminiTargetUrl();
 }
 export async function openGeminiToolsMenu(page) {
     await ensureGeminiPage(page);
@@ -1049,7 +1063,7 @@ export async function startNewGeminiChat(page) {
     await ensureGeminiPage(page);
     const action = await page.evaluate(clickNewChatScript());
     if (action === 'navigate') {
-        await page.goto(GEMINI_APP_URL, { waitUntil: 'load', settleMs: 2500 });
+        await page.goto(buildGeminiTargetUrl(), { waitUntil: 'load', settleMs: 2500 });
     }
     await page.wait(1);
     return action;
@@ -1936,3 +1950,134 @@ export async function waitForGeminiResponse(page, baseline, promptText, timeoutS
     }
     return '';
 }
+
+// Gemini 模型常量
+export const GEMINI_MODELS = {
+    'gemini-2.0-flash-exp': ['Gemini 2.0 Flash', 'gemini 2.0 flash', '2.0 flash'],
+    'gemini-exp-1206': ['Gemini Experimental 1206', 'experimental 1206', 'exp 1206'],
+    'gemini-2.0-flash-thinking': ['Gemini 2.0 Flash Thinking', '2.0 flash thinking', 'thinking'],
+    'gemini-1.5-pro': ['Gemini 1.5 Pro', '1.5 pro', 'pro'],
+    'gemini-1.5-flash': ['Gemini 1.5 Flash', '1.5 flash', 'flash'],
+};
+
+/**
+ * 打开 Gemini 模型选择器
+ */
+export async function openGeminiModelPicker(page) {
+    await ensureGeminiPage(page);
+    const opened = await page.evaluate(`
+        (() => {
+            const isVisible = (el) => {
+                if (!(el instanceof HTMLElement)) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+
+            // 查找模型选择器按钮
+            const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+            const modelButton = buttons.find(btn => {
+                const text = (btn.textContent || '').toLowerCase();
+                const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                return isVisible(btn) && (
+                    text.includes('gemini') || 
+                    aria.includes('model') || 
+                    aria.includes('模型')
+                );
+            });
+
+            if (modelButton instanceof HTMLElement) {
+                modelButton.click();
+                return true;
+            }
+            return false;
+        })()
+    `);
+    
+    if (opened) {
+        await page.wait(0.5);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * 选择指定的 Gemini 模型
+ */
+export async function selectGeminiModel(page, modelKey) {
+    await ensureGeminiPage(page);
+    
+    const labels = GEMINI_MODELS[modelKey];
+    if (!labels) {
+        return { success: false, reason: 'unknown-model' };
+    }
+
+    // 尝试打开模型选择器
+    const opened = await openGeminiModelPicker(page);
+    if (!opened) {
+        return { success: false, reason: 'picker-not-found' };
+    }
+
+    // 选择模型
+    const labelsJson = JSON.stringify(labels);
+    const selected = await page.evaluate(`
+        ((targetLabels) => {
+            const isVisible = (el) => {
+                if (!(el instanceof HTMLElement)) return false;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+            };
+
+            const normalize = (text) => (text || '').toLowerCase().trim();
+
+            // 查找模型选项
+            const menuItems = Array.from(document.querySelectorAll(
+                '[role="menuitem"], [role="option"], button, [role="button"]'
+            ));
+
+            for (const item of menuItems) {
+                if (!isVisible(item)) continue;
+                const text = normalize(item.textContent || '');
+                const aria = normalize(item.getAttribute('aria-label') || '');
+                const combined = text + ' ' + aria;
+
+                for (const label of targetLabels) {
+                    if (combined.includes(normalize(label))) {
+                        item.click();
+                        return label;
+                      }
+                  }
+              }
+              return '';
+          })(${labelsJson})
+      `);
+
+      if (selected) {
+          await page.wait(0.5);
+          return { success: true, model: selected };
+      }
+
+      return { success: false, reason: 'model-not-found' };
+  }
+
+  /**
+   * 获取当前选中的模型
+   */
+  export async function getCurrentGeminiModel(page) {
+      await ensureGeminiPage(page);
+      return await page.evaluate(`
+          (() => {
+              const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+              for (const btn of buttons) {
+                  const text = (btn.textContent || '').trim();
+                  if (/gemini.*\\d+\\.\\d+/i.test(text)) {
+                      return text;
+                  }
+              }
+              return 'Unknown';
+          })()
+      `);
+  }
