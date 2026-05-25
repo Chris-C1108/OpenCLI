@@ -901,7 +901,8 @@ function clickGeminiConfirmButtonScript(labels) {
 }
 function getGeminiConversationListScript() {
     return `
-    (() => {
+    (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       const normalizeText = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
       const clampText = (value, maxLength) => {
         const normalized = normalizeText(value);
@@ -924,6 +925,19 @@ function getGeminiConversationListScript() {
         return rect.width > 0 && rect.height > 0;
       };
 
+      // Try expanding the sidebar if collapsed
+      try {
+        const menuButton = Array.from(document.querySelectorAll('button, [role="button"]')).find(btn => {
+          const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+          const className = (btn.className || '').toLowerCase();
+          return aria.includes('main menu') || aria.includes('主菜单') || className.includes('main-menu') || className.includes('menu-button');
+        });
+        if (menuButton && (menuButton.getAttribute('aria-expanded') === 'false' || !document.querySelector('nav'))) {
+          menuButton.click();
+          await sleep(600);
+        }
+      } catch (e) {}
+
       const selector = 'a[href*="/app"]';
       const navRoots = Array.from(document.querySelectorAll('nav, aside, [role="navigation"]'));
       const rootsWithLinks = navRoots.filter((root) => root.querySelector(selector));
@@ -937,9 +951,17 @@ function getGeminiConversationListScript() {
         const anchors = Array.from(root.querySelectorAll(selector));
         for (const anchor of anchors) {
           if (!(anchor instanceof HTMLAnchorElement)) continue;
-          if (!isVisible(anchor)) continue;
+          
+          const inNav = anchor.closest('nav, aside, [role="navigation"]');
+          if (!inNav && !isVisible(anchor)) continue;
+          
           const href = anchor.getAttribute('href') || '';
           if (!href) continue;
+          
+          // Only matches URLs that have a session ID
+          const sessionMatch = href.match(/\\/app\\/([a-f0-9]{16})/i);
+          if (!sessionMatch) continue;
+
           let url = '';
           try {
             url = new URL(href, 'https://gemini.google.com').href;
@@ -1956,8 +1978,12 @@ export const GEMINI_MODELS = {
     'gemini-2.0-flash-exp': ['Gemini 2.0 Flash', 'gemini 2.0 flash', '2.0 flash'],
     'gemini-exp-1206': ['Gemini Experimental 1206', 'experimental 1206', 'exp 1206'],
     'gemini-2.0-flash-thinking': ['Gemini 2.0 Flash Thinking', '2.0 flash thinking', 'thinking'],
-    'gemini-1.5-pro': ['Gemini 1.5 Pro', '1.5 pro', 'pro'],
-    'gemini-1.5-flash': ['Gemini 1.5 Flash', '1.5 flash', 'flash'],
+    'gemini-1.5-pro': ['Gemini 1.5 Pro', '1.5 pro', 'pro', '3.1 pro', '3.1 Pro'],
+    'gemini-1.5-flash': ['Gemini 1.5 Flash', '1.5 flash', 'flash', '3.5 flash', '3.5 Flash', '3.1 flash-lite', 'lite'],
+    // 新增对当前 Gemini 3.5 / 3.1 的直接支持
+    'gemini-3.5-flash': ['3.5 Flash', '3.5 flash', 'flash'],
+    'gemini-3.1-pro': ['3.1 Pro', '3.1 pro', 'pro'],
+    'gemini-3.1-flash-lite': ['3.1 Flash-Lite', '3.1 flash lite', 'lite', 'fastest answers'],
 };
 
 /**
@@ -1980,10 +2006,14 @@ export async function openGeminiModelPicker(page) {
             const modelButton = buttons.find(btn => {
                 const text = (btn.textContent || '').toLowerCase();
                 const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                const className = (btn.className || '').toLowerCase();
                 return isVisible(btn) && (
                     text.includes('gemini') || 
                     aria.includes('model') || 
-                    aria.includes('模型')
+                    aria.includes('模型') ||
+                    aria.includes('mode picker') ||
+                    aria.includes('选择模式') ||
+                    className.includes('input-area-switch')
                 );
             });
 
@@ -2033,9 +2063,9 @@ export async function selectGeminiModel(page, modelKey) {
 
             const normalize = (text) => (text || '').toLowerCase().trim();
 
-            // 查找模型选项
+            // 查找模型选项，增加 gem-menu-item 标签支持
             const menuItems = Array.from(document.querySelectorAll(
-                '[role="menuitem"], [role="option"], button, [role="button"]'
+                'gem-menu-item, [role="menuitem"], [role="option"], button, [role="button"]'
             ));
 
             for (const item of menuItems) {
