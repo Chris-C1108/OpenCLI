@@ -1009,6 +1009,20 @@ function clickGeminiConversationByTitleScript(query) {
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
       };
+
+      // Support notebook chat rows
+      const notebookRows = Array.from(document.querySelectorAll('PROJECT-CHAT-ROW'));
+      for (const row of notebookRows) {
+        if (!isVisible(row)) continue;
+        const titleEl = row.querySelector('.chat-title');
+        const title = normalizeText(titleEl?.textContent || titleEl?.getAttribute('aria-label') || '');
+        if (title && targetQuery && title.includes(targetQuery)) {
+          const clickTarget = row.querySelector('.project-chat-row-content') || row;
+          clickTarget.click();
+          return true;
+        }
+      }
+
       const selector = 'nav a[href*="/app"], aside a[href*="/app"], [role="navigation"] a[href*="/app"], a[href*="/app"]';
       const anchors = Array.from(document.querySelectorAll(selector));
 
@@ -1094,14 +1108,52 @@ export async function startNewGeminiChat(page) {
     await page.wait(1);
     return action;
 }
-export async function getGeminiConversationList(page) {
+export async function getGeminiNotebooksFromViewPage(page) {
+    await page.goto('https://gemini.google.com/notebooks/view', { waitUntil: 'load', settleMs: 3000 });
+    await page.wait(1.5);
+    const raw = await page.evaluate(() => {
+        const anchors = Array.from(document.querySelectorAll('a[href*="/notebook/"]'));
+        const seen = new Set();
+        const list = [];
+        for (const a of anchors) {
+            const href = a.getAttribute('href') || '';
+            const match = href.match(/\/notebook\/([a-f0-9-]+)/i);
+            if (match) {
+                const uuid = match[1];
+                const title = a.textContent?.trim() || a.getAttribute('aria-label')?.trim() || '';
+                const url = new URL(href, window.location.origin).href;
+                const key = uuid + '::' + title;
+                if (!seen.has(key) && title) {
+                    seen.add(key);
+                    list.push({ title, url });
+                }
+            }
+        }
+        return list;
+    });
+    return Array.isArray(raw) ? raw.map(item => ({ Title: item.title, Url: item.url })) : [];
+}
+
+export async function getGeminiConversationList(page, includeAllNotebooks = false) {
     await ensureGeminiPage(page);
     const raw = await page.evaluate(getGeminiConversationListScript());
-    if (!Array.isArray(raw))
-        return [];
-    return raw
-        .filter((item) => item && typeof item.title === 'string' && typeof item.url === 'string')
-        .map((item) => ({ Title: item.title, Url: item.url }));
+    const list = Array.isArray(raw)
+        ? raw
+            .filter((item) => item && typeof item.title === 'string' && typeof item.url === 'string')
+            .map((item) => ({ Title: item.title, Url: item.url }))
+        : [];
+        
+    if (includeAllNotebooks) {
+        try {
+            const notebooks = await getGeminiNotebooksFromViewPage(page);
+            for (const nb of notebooks) {
+                if (!list.some(item => item.Url === nb.Url)) {
+                    list.push(nb);
+                }
+            }
+        } catch (e) {}
+    }
+    return list;
 }
 export async function clickGeminiConversationByTitle(page, query) {
     await ensureGeminiPage(page);

@@ -11013,7 +11013,7 @@
   {
     "site": "gemini",
     "name": "sessions",
-    "description": "List all Gemini conversation sessions",
+    "description": "List all Gemini conversation sessions, or sessions within a specific notebook",
     "access": "read",
     "domain": "gemini.google.com",
     "strategy": "cookie",
@@ -11025,10 +11025,18 @@
         "default": 20,
         "required": false,
         "help": "Max number of sessions to return (default: 20)"
+      },
+      {
+        "name": "notebook",
+        "type": "str",
+        "default": "",
+        "required": false,
+        "help": "Notebook ID or Title to list sessions for"
       }
     ],
     "columns": [
       "SessionID",
+      "Type",
       "Title",
       "URL"
     ],
